@@ -124,3 +124,72 @@ def analyze_multiple_timeseries_dependencies(df1, df2, cols1, cols2,
             results[pair_name] = (correlations, fig)
 
     return results
+
+
+def plot_dependency_network(df1, df2, col1, col2, 
+                          name1='series1', name2='series2',
+                          tau_max=3):
+    """
+    Create a network visualization of dependencies between time series.
+    
+    Parameters:
+    -----------
+    df1 : pandas.DataFrame
+        First DataFrame containing the time series (with date index)
+    df2 : pandas.DataFrame
+        Second DataFrame containing the time series (with date index)
+    col1 : str
+        Column name from df1 to analyze
+    col2 : str
+        Column name from df2 to analyze
+    name1 : str, optional
+        Display name for the first series (default: 'series1')
+    name2 : str, optional
+        Display name for the second series (default: 'series2')
+    tau_max : int, optional
+        Maximum time lag to test (default: 3)
+        
+    Returns:
+    --------
+    tuple
+        (correlations, fig) containing the correlation results and matplotlib figure
+    """
+    # Extract data (same as above)
+    common_dates = df1.index.intersection(df2.index)
+    data1 = df1.loc[common_dates, col1].values.reshape(-1, 1)
+    data2 = df2.loc[common_dates, col2].values.reshape(-1, 1)
+    
+    combined_data = np.hstack([data1, data2])
+    var_names = [name1, name2]
+    dataframe = pp.DataFrame(combined_data, 
+                           datatime=np.arange(len(common_dates)),
+                           var_names=var_names)
+    
+    # Initialize PCMCI
+    parcorr = ParCorr(significance='analytic')
+    pcmci = PCMCI(dataframe=dataframe, 
+                  cond_ind_test=parcorr,
+                  verbosity=1)
+    
+    # Run analysis
+    correlations = pcmci.run_bivci(tau_max=tau_max, 
+                                  tau_min=0,
+                                  val_only=True)['val_matrix']
+    
+    # Create network plot
+    fig, ax = plt.subplots(figsize=(8, 6))
+    
+    tp.plot_graph(
+        val_matrix=correlations,
+        var_names=var_names,
+        link_colorbar_label='cross-correlation',
+        node_colorbar_label='auto-correlation',
+        label_fontsize=10,
+        link_width=2.0,
+        node_size=0.3
+    )
+    
+    plt.title(f'Network Dependencies: {name1} vs {name2}')
+    plt.tight_layout()
+    
+    return correlations, fig
